@@ -5,6 +5,5 @@ matches = retrieve_relevant_chunks(query)
 
 for m in matches:
     print("\nScore:", m.score)
-    print("Text Source:", m.metadata["source"])
-    print("Doc Role:", m.metadata["role"])
-    print("Doc ID:", m.metadata["doc_id"])
+    print("Text Source:", m.metadata.get("source"))
+    print("Doc ID:", m.metadata.get("doc_id"))

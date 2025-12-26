@@ -4,135 +4,185 @@ import requests
 from requests.auth import HTTPBasicAuth
 import os
 
-
+# -------------------------
+# Config
+# -------------------------
 load_dotenv()
+API_URL = os.getenv("API_URL")
 
+st.set_page_config(
+    page_title="Problem Statement - 4 ",
+    layout="centered"
+)
 
-API_URL=os.getenv("API_URL")
+# -------------------------
+# Session State
+# -------------------------
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+    st.session_state.username = ""
+    st.session_state.password = ""
+    st.session_state.page = "home"
 
-st.set_page_config(page_title="Multilingual NCERT Doubt-Solver",layout="centered")
+# -------------------------
+# Helpers
+# -------------------------
+def auth():
+    return HTTPBasicAuth(
+        st.session_state.username,
+        st.session_state.password
+    )
 
-# Session state initalization
-if "username" not in st.session_state:
-    st.session_state.username=""
-    st.session_state.password=""
-    st.session_state.role=""
-    st.session_state.logged_in=False
-    st.session_state.mode="auth"
+def safe_json(res):
+    try:
+        return res.json()
+    except:
+        return None
 
-# Auth header
-def get_auth():
-    return HTTPBasicAuth(st.session_state.username,st.session_state.password)
-
-# Auth UI
-
+# -------------------------
+# Authentication UI
+# -------------------------
 def auth_ui():
-    st.title("EduRag")
-    st.subheader("Login or Signup")
+    st.title("📄 Enterprise PDFs → Searchable Knowledge")
+    st.caption("Login to upload documents and ask questions")
 
-    tab1,tab2=st.tabs(["Login","Signup"])
+    tab1, tab2 = st.tabs(["🔐 Login", "🆕 Signup"])
 
-    # Login
+    # ---- LOGIN ----
     with tab1:
-        username=st.text_input("Username",key="login_user")
-        password=st.text_input("Password",type="password",key="login_pass")
+        st.subheader("Login")
+        u = st.text_input("Username", key="login_user")
+        p = st.text_input("Password", type="password", key="login_pass")
+
         if st.button("Login"):
-            res=requests.get(f"{API_URL}/login",auth=HTTPBasicAuth(username,password))
-            if res.status_code==200:
-                user_data=res.json()
-                st.session_state.username=username
-                st.session_state.password=password
-                st.session_state.role=user_data["role"]
-                st.session_state.logged_in=True
-                st.session_state.mode="chat"
-                st.success(f"Welcome {username}")
+            res = requests.get(
+                f"{API_URL}/auth/login",
+                auth=HTTPBasicAuth(u, p)
+            )
+            if res.status_code == 200:
+                st.session_state.logged_in = True
+                st.session_state.username = u
+                st.session_state.password = p
                 st.rerun()
             else:
-                st.error(res.json().get("detail","Login failed"))
+                st.error("Invalid username or password")
 
-
-    # Signup
+    # ---- SIGNUP ----
     with tab2:
-        new_user=st.text_input("New Username",key="signup_user")
-        new_pass=st.text_input("New Password",type="password",key="signup_pass")
-        new_role=st.selectbox("Choose Role",["Admin","Student_Grade_5","Student_Grade_6","Student_Grade_7","Student_Grade_8","Student_Grade_9","Student_Grade_10"])
+        st.subheader("Create Account")
+        u = st.text_input("Choose Username", key="signup_user")
+        p = st.text_input("Choose Password", type="password", key="signup_pass")
+
         if st.button("Signup"):
-            payload={"username":new_user,"password":new_pass,"role":new_role}
-            res=requests.post(f"{API_URL}/signup",json=payload)
-            if res.status_code==200:
-                user_data=res.json()
-                st.success("Signup successful! You can login.")
+            res = requests.post(
+                f"{API_URL}/auth/signup",
+                json={"username": u, "password": p}
+            )
+            if res.status_code == 200:
+                st.success("Account created successfully. Please login.")
             else:
-                st.error(res.json().get("detail","Signup failed"))
+                st.error("User already exists or invalid input")
 
+# -------------------------
+# Upload Page
+# -------------------------
+def upload_page():
+    st.subheader("📤 Upload PDF Document")
+    st.caption("Upload enterprise reports, manuals, or scanned PDFs")
 
-
-# Upload PDF (Admin only)
-def upload_docs():
-    st.subheader("Upload PDF for specific Grade Student")
-    uploaded_file=st.file_uploader("Choose a PDF file",type=["pdf"])
-    role_for_doc=st.selectbox("Target Role dor docs",["Student_Grade_5","Student_Grade_6","Student_Grade_7","Student_Grade_8","Student_Grade_9","Student_Grade_10"])
+    file = st.file_uploader("Select a PDF file", type=["pdf"])
 
     if st.button("Upload Document"):
-        if uploaded_file:
-            files={"file":(uploaded_file.name,uploaded_file.getvalue(),"application/pdf")}
-            data={"role":role_for_doc}
-            res=requests.post(f"{API_URL}/upload_docs",files=files,data=data,auth=get_auth())
-            if res.status_code==200:
-                doc_info=res.json()
-                st.success(f"Uploaded: {uploaded_file.name}")
-                st.info(f"Doc Id : {doc_info['doc_id']},Access:{doc_info['accessible_to']}")
-            else:
-                st.error(res.json().get("detail","Upload failed"))
+        if not file:
+            st.warning("Please select a PDF file")
+            return
+
+        res = requests.post(
+            f"{API_URL}/docs/upload_docs",
+            files={"file": (file.name, file.getvalue(), "application/pdf")},
+            auth=auth()
+        )
+
+        if res.status_code == 200:
+            st.success("Document uploaded and indexed successfully")
         else:
-            st.warning("Please upload a file")
+            st.error("Document upload failed")
 
+# -------------------------
+# Query Page
+# -------------------------
+def query_page():
+    st.subheader("💬 Ask a Question")
+    st.caption("Ask questions directly from uploaded documents")
 
+    q = st.text_input("Enter your question")
 
-# chat interface
-def chat_interface():
-    st.subheader("Ask a Doubt")
-    msg=st.text_input("Your query")
+    if st.button("Get Answer"):
+        if not q.strip():
+            st.warning("Please enter a question")
+            return
 
-    if st.button("Send"):
-        if not msg.strip():
-            st.warning("Please enter a query")
-        
-        res=requests.post(f"{API_URL}/chat",data={"message":msg},auth=get_auth())
-        if res.status_code==200:
-            reply=res.json()
-            st.markdown('### Answer: ')
-            st.success(reply["answer"])
-            if reply.get("sources"):
-                for src in reply["sources"]:
-                    st.write(f"--{src}")
+        res = requests.post(
+            f"{API_URL}/chat",
+            data={"message": q},
+            auth=auth()
+        )
+
+        data = safe_json(res)
+
+        if res.status_code == 200:
+            st.success(data.get("answer", ""))
         else:
-            try:
-                error_msg = res.json().get("detail", "Something is wrong.")
-            except ValueError:
-                error_msg = res.text or "Invalid response from server."
-            st.error(error_msg)
+            st.error("Failed to retrieve answer")
 
+# -------------------------
+# Extract / Summary Page
+# -------------------------
+def query_extract_summury():
+    st.subheader("🧾 Document Summary")
+    st.caption("Automatically summarize uploaded documents")
 
+    if st.button("Extract Summary"):
+        res = requests.post(
+            f"{API_URL}/chat",
+            data={"message": "Summarize the document"},
+            auth=auth()
+        )
 
-# main flow
+        data = safe_json(res)
+
+        if res.status_code == 200:
+            st.success(data.get("answer", ""))
+        else:
+            st.error("Failed to extract summary")
+
+# -------------------------
+# Main App
+# -------------------------
 if not st.session_state.logged_in:
     auth_ui()
 else:
-    st.title(f"Welcome , {st.session_state.username}")
-    st.markdown(f"**Role**: `{st.session_state.role}`")
+    st.title(f"Welcome, {st.session_state.username}")
+    st.caption("Choose an action below")
+
+    col1, col2, col3 = st.columns(3)
+
+    if col1.button("📤 Upload Document"):
+        st.session_state.page = "upload"
+    if col2.button("💬 Ask Query"):
+        st.session_state.page = "query"
+    if col3.button("🧾 Extract Summary"):
+        st.session_state.page = "extract"
+
+    st.divider()
+
+    if st.session_state.page == "upload":
+        upload_page()
+    elif st.session_state.page == "query":
+        query_page()
+    elif st.session_state.page == "extract":
+        query_extract_summury()
+
     if st.button("Logout"):
-        st.session_state.logged_in=False
-        st.session_state.username=""
-        st.session_state.password=""
-        st.session_state.role=""
-        st.session_state.mode="auth"
+        st.session_state.clear()
         st.rerun()
-
-
-    if st.session_state.role=="Admin":
-        upload_docs()
-        st.divider()
-        chat_interface()
-    else:
-        chat_interface()

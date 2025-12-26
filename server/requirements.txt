@@ -49,7 +49,7 @@ requests
 tqdm
 
 # Database + Auth (if needed in your backend)
-pymongo[bson]
+pymongo
 bcrypt
 
 
